@@ -1,0 +1,92 @@
+# Deploy pending code changes between environments
+#
+# REQUIRED REPOSITORY VARIABLES:
+# - SLACK_URL
+# --- Optional. Required if posting pass/fail notifications to slack
+# --- ex: https://hooks.slack.com/services/YOUR/SLACK/URL
+# - PANTHEON_SITE_NAME
+# --- The name of the Pantheon site being deployed to
+# --- ex: lcm-backend
+#
+# REQUIRED SECRETS:
+# - TERMINUS_DOWNSTREAM_SSH_KEY
+# --- SSH Private key that is associated with a Pantheon user that has access to deploy to the target site
+# --- Without this, terminus can not execute Drush commands on the target site
+# - TERMINUS_MACHINE_TOKEN
+# --- A Pantheon machine token associated with a Pantheon user that has access to deploy to the target site
+
+name: Terminus Safe Deploy
+env:
+  SLACK_URL: ${{ vars.SLACK_URL }}
+  SLACK_MESSAGE_CONTEXT_LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  DEPLOY_MESSAGE: '--deploy-message="${{ inputs.deploy_message }}"'
+run-name: Deploy to ${{ inputs.deploy_target }} (@${{ github.actor }})
+on:
+  workflow_call:
+    secrets:
+      TERMINUS_DOWNSTREAM_SSH_KEY:
+        required: true
+      TERMINUS_MACHINE_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        type: choice
+        description: Target deployment environment
+        options:
+          - test
+          - live
+      deploy_message:
+        type: string
+        description: Pantheon deploy message
+      deploy_force:
+        type: boolean
+        default: false
+        description: Force deployment (ignore target environment CMI overrides)
+      post_import_config:
+        type: boolean
+        default: true
+        description: Import configuration
+      post_db_update:
+        type: boolean
+        default: true
+        description: Run DB updates
+      clear_env_cache:
+        type: boolean
+        default: true
+        description: Clear target environment cache
+      slack_alert:
+        type: boolean
+        default: true
+        description: Alert Slack
+jobs:
+  pre-deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: jlandfried/terminus-safe-deploy:1.0.0-alpha
+    steps:
+      - name: Announce configuration
+        run: >
+          echo Environment Name: ${{ inputs.environment_name }};
+          echo Deploy Message: ${{ inputs.deploy_message }};
+          echo Deploy even if configuration overrides exist on target environment: ${{ inputs.deploy_force }};
+          echo Import configuration on target environment: ${{ inputs.post_import_config }};
+          echo Run database updates on target environment: ${{ inputs.post_db_update }};
+          echo Send slack alert: ${{ inputs.slack_alert }};
+      - uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.TERMINUS_DOWNSTREAM_SSH_KEY }}
+      # Make terminus plugins, etc from image available to github user
+      - name: copy terminus config
+        run: cp -r /root/.terminus /github/home/.terminus
+      - name: Terminus login
+        run: terminus auth:login --machine-token=${{ secrets.TERMINUS_MACHINE_TOKEN }}
+      - name: deploy
+        run: >
+          terminus safe-deploy:deploy ${{ vars.PANTHEON_SITE_NAME }}.${{ inputs.environment_name}}
+          ${{ inputs.deploy_force && '--force-deploy' || '' }}
+          ${{ inputs.post_import_config && '--with-cim' || '' }}
+          ${{ inputs.post_db_update && '--with-updates' || '' }}
+          ${{ inputs.clearn_env_cache && '--clear-env-caches' || '' }}
+          ${{ inputs.slack_alert && '--slack-alert' || '' }}
+          ${{ inputs.deploy_message && env.DEPLOY_MESSAGE || '' }}
