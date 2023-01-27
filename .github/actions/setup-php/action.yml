@@ -1,0 +1,41 @@
+name: Set up PHP and install composer dependencies
+description: Install composer dependencies while leveraging github cache actions
+inputs:
+  php-version:
+    description: Specifies php version to use
+    required: true
+  mode:
+    description: Set to 'production' for an optimized composer autoloader without development dependencies
+    required: false
+    default: 'dev'
+
+runs:
+  using: composite
+
+  steps:
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ inputs.php-version }}
+
+    - name: Get composer cache directory
+      id: composer-cache
+      run: echo "::set-output name=dir::$(composer config cache-files-dir)"
+      shell: bash
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+
+    - name: Install development composer dependencies
+      run: composer install --prefer-dist --no-progress
+      shell: bash
+      if: ${{ inputs.mode != 'production' }}
+
+    - name: Install production composer dependencies
+      run: composer install --prefer-dist --no-dev -o --no-progress
+      shell: bash
+      if: ${{ inputs.mode == 'production' }}
