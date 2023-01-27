@@ -1,0 +1,43 @@
+name: Deploy Artifact to downstream repository
+description: Deploys artifact using lastcall-artifact.sh
+
+inputs:
+  downstream-ssh-key:
+    description: SSH key with access to downstream repository
+    required: true
+  downstream-git-url:
+    description: Downstream git repository URL
+    required: true
+  downstream-git-branch:
+    description: Branch name the artifact will be pushed to
+    required: true
+  git-author-name:
+    description: Name of author for artifact commit
+    required: false
+    default: Github Actions
+  git-author-email:
+    description: Email of author for artifact commit
+    required: false
+    default: github-actions@ci.com
+
+runs:
+  using: composite
+
+  steps:
+    - name: Get trusted host key
+      run: echo TRUSTED_HOST_KEY=$(ssh-keyscan -p 2222 -H $(echo "${{ inputs.downstream-git-url }}" | sed "s/.*@\(.*\):.*/\1/")) >> $GITHUB_ENV
+      shell: bash
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ inputs.downstream-ssh-key }}
+        known_hosts: ${{ env.TRUSTED_HOST_KEY }}
+    - name: Set git committer
+      run: git config --global user.email "${{ inputs.git-author-email }}" && git config --global user.name "${{ inputs.git-author-name }}"
+      shell: bash
+    - name: Install artifact.sh
+      run: yarn global add lastcall-artifact.sh@^1.1.0
+      shell: bash
+    - name: Push artifact
+      run: artifactsh -a ${{ inputs.downstream-git-url }} -b ${{ inputs.downstream-git-branch }}
+      shell: bash
