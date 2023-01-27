@@ -60,7 +60,7 @@ on:
         default: true
         description: Alert Slack
 jobs:
-  pre-deploy:
+  pantheon-deploy:
     runs-on: ubuntu-latest
     container:
       image: lastcallmedia/terminus-safe-deploy:latest
