@@ -63,7 +63,7 @@ jobs:
   pre-deploy:
     runs-on: ubuntu-latest
     container:
-      image: jlandfried/terminus-safe-deploy:1.0.0-alpha
+      image: lastcallmedia/terminus-safe-deploy:latest
     steps:
       - name: Announce configuration
         run: >
